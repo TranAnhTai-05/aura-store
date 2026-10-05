@@ -105,6 +105,34 @@ Từ đó, mỗi lần `git push` lên `main`, trong khoảng 2 phút Jenkins t�
 | Đăng nhập xong bị đăng xuất ngay | Thiếu `COOKIE_SECURE=false` trong `.env` |
 | Muốn quay về bản cũ | Sửa `AURA_IMAGE=...:<số build cũ>` trong `C:\aura-deploy\.env`, chạy `docker compose -p aura-prod up -d` trong thư mục đó |
 
+## Triển khai lên Render
+
+Render build thẳng từ `Dockerfile` theo cấu hình trong `render.yaml`, không cần Jenkins hay Docker Hub.
+Render không có MySQL nên cơ sở dữ liệu đặt ở Aiven (gói miễn phí).
+
+1. **Aiven** (`console.aiven.io`) → Create service → MySQL → gói Free. Khi service chạy, mở tab
+   Overview để lấy Host, Port, User, Password, Database name và tải **CA certificate** (`ca.pem`).
+2. **Render** → mở
+   `https://dashboard.render.com/blueprint/new?repo=https://github.com/<tên-bạn>/aura-store`
+   rồi nhập các giá trị Render hỏi:
+
+   | Biến | Giá trị |
+   |---|---|
+   | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` | Lấy từ Aiven |
+   | `DB_NAME` | `defaultdb` (cơ sở dữ liệu Aiven tạo sẵn) |
+   | `DB_SSL_CA` | Toàn bộ nội dung tệp `ca.pem` |
+
+   `JWT_SECRET` do Render tự sinh; `DB_SSL` và `TRUST_PROXY` đã đặt sẵn trong `render.yaml`.
+3. Bấm **Deploy Blueprint**. Lần chạy đầu máy chủ tự tạo bảng và nạp dữ liệu mẫu; web có địa chỉ
+   `https://aura-store-xxxx.onrender.com`. Từ đó mỗi lần `git push` lên `main` Render tự deploy lại.
+
+Giới hạn của gói miễn phí:
+
+- Web ngủ sau 15 phút không có ai truy cập; lượt truy cập kế tiếp phải chờ khoảng một phút.
+- Ổ đĩa không được giữ lại: ảnh tải lên từ trang quản trị (`server/uploads`) mất mỗi khi web
+  khởi động lại. Ảnh nhập bằng đường dẫn `https://…` không bị ảnh hưởng. Muốn giữ ảnh tải lên
+  cần gói trả phí kèm Disk gắn vào `/app/server/uploads`.
+
 ## Triển khai lên server Linux thật
 
 Khi có VPS, cài Docker ở đó, chép `docker-compose.prod.yml` và `.env` lên server, rồi đổi stage

@@ -8,6 +8,7 @@ const connectionOptions = {
   port: config.db.port,
   user: config.db.user,
   password: config.db.password,
+  ssl: config.db.ssl,
   charset: 'utf8mb4',
   // Timestamps are stored and read as UTC; the browser formats them for the viewer
   timezone: 'Z',

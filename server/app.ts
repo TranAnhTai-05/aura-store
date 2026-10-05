@@ -15,7 +15,7 @@ export function createApp() {
 
   app.disable('x-powered-by');
   // Behind the Vite proxy in development and a reverse proxy in production
-  app.set('trust proxy', 'loopback');
+  app.set('trust proxy', config.trustProxy);
 
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');

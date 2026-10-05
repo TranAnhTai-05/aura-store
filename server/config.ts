@@ -43,7 +43,18 @@ export const config = {
     // XAMPP ships with an empty root password, so empty is allowed here
     password: process.env.DB_PASSWORD ?? '',
     database: required('DB_NAME'),
+    // Hosted MySQL (Aiven…) requires TLS. DB_SSL_CA is the provider's CA certificate (PEM);
+    // without it the system's trusted authorities are used.
+    ssl:
+      process.env.DB_SSL === 'true'
+        ? { rejectUnauthorized: true, ca: process.env.DB_SSL_CA?.replace(/\\n/g, '\n') || undefined }
+        : undefined,
   },
+  // Which proxies may report the visitor's IP (used to rate-limit logins). Hosting platforms
+  // put one proxy in front of the app: TRUST_PROXY=1. Default: only a proxy on this machine.
+  trustProxy: /^\d+$/.test(process.env.TRUST_PROXY ?? '')
+    ? Number(process.env.TRUST_PROXY)
+    : process.env.TRUST_PROXY || 'loopback',
   uploadsDir: path.join(ROOT_DIR, 'server', 'uploads'),
   clientDir: path.join(ROOT_DIR, 'dist'),
 };

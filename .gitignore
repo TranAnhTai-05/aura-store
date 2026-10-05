@@ -1,0 +1,12 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Product photos uploaded through the admin area
+server/uploads/*
+!server/uploads/.gitkeep

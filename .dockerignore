@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+.git
+.claude
+.env*
+*.log
+server/uploads/*
+!server/uploads/.gitkeep
+Dockerfile
+docker-compose*.yml
+Jenkinsfile

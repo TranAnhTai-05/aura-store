@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-display: 'Syne', sans-serif;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: #18181b;
+    background-color: #fafaf9;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display), var(--font-sans);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  :focus-visible {
+    outline: 2px solid #18181b;
+    outline-offset: 2px;
+  }
+
+  .admin-area :focus-visible {
+    outline-color: #fbbf24;
+  }
+}
+
+/* Inputs below 16px make iOS zoom the page on focus */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d4d4d8;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa;
+}
+
+/* Entrance transitions for overlays and toasts */
+@keyframes aura-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes aura-rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes aura-slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes aura-slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.aura-fade-in { animation: aura-fade-in 0.18s ease-out both; }
+.aura-rise-in { animation: aura-rise-in 0.2s ease-out both; }
+.aura-slide-in-right { animation: aura-slide-in-right 0.22s ease-out both; }
+.aura-slide-in-left { animation: aura-slide-in-left 0.22s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .aura-fade-in,
+  .aura-rise-in,
+  .aura-slide-in-right,
+  .aura-slide-in-left {
+    animation: none;
+  }
+}
+
+/* Printing an order prints the order sheet only, in ink-friendly colours */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  [data-print-area],
+  [data-print-area] * {
+    visibility: visible;
+    color: #000 !important;
+    background: transparent !important;
+    border-color: #d4d4d8 !important;
+    box-shadow: none !important;
+  }
+  [data-print-area] {
+    position: absolute;
+    inset: 0;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 24px !important;
+  }
+  [data-print-hidden] {
+    display: none !important;
+  }
+}

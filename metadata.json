@@ -1,0 +1,6 @@
+{
+  "name": "AURA | Thương Hiệu Thiết Bị & Phong Cách Sống Đẳng Cấp",
+  "description": "Nền tảng thương mại điện tử chuyên nghiệp cung cấp thiết bị công nghệ cao cấp, đồ gia dụng thông minh và phụ kiện phong cách sống.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

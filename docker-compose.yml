@@ -1,0 +1,29 @@
+# MySQL for local development. Values come from .env (copy .env.example to .env first).
+# Not needed when MySQL is already installed on the machine (XAMPP, MySQL Installer…).
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: aura-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: Asia/Ho_Chi_Minh
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "${DB_PORT}:3306"
+    volumes:
+      - aura-mysql-data:/var/lib/mysql
+      - ./scripts/docker-init.sh:/docker-entrypoint-initdb.d/10-grants.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  aura-mysql-data:

@@ -46,15 +46,13 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-cred',
                         usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    powershell '''
-                        $ErrorActionPreference = 'Stop'
-                        $env:DOCKER_PASS | docker login -u $env:DOCKER_USER --password-stdin
-                        if ($LASTEXITCODE) { exit $LASTEXITCODE }
-                        $repo = "docker.io/$($env:DOCKER_USER)/$($env:IMAGE_NAME)"
-                        docker push "$($repo):$($env:BUILD_NUMBER)"
-                        if ($LASTEXITCODE) { exit $LASTEXITCODE }
-                        docker push "$($repo):latest"
-                        if ($LASTEXITCODE) { exit $LASTEXITCODE }
+                    // Dùng cmd thay vì PowerShell: PowerShell chèn BOM vào đầu mật khẩu khi pipe,
+                    // khiến Docker Hub báo "incorrect username or password"
+                    bat '''
+                        @echo off
+                        echo %DOCKER_PASS%| docker login -u %DOCKER_USER% --password-stdin || exit /b 1
+                        docker push docker.io/%DOCKER_USER%/%IMAGE_NAME%:%BUILD_NUMBER% || exit /b 1
+                        docker push docker.io/%DOCKER_USER%/%IMAGE_NAME%:latest || exit /b 1
                     '''
                 }
             }

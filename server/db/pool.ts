@@ -1,4 +1,5 @@
-import sql, { ConnectionPool, Transaction } from 'mssql';
+import sql from 'mssql';
+import type { ConnectionPool, Transaction } from 'mssql';
 import { config } from '../config';
 
 export type DbValue = string | number | boolean | null | Date;
@@ -50,7 +51,7 @@ let pool: Pool | null = null;
 export async function connect(): Promise<Pool> {
   if (pool) return pool;
 
-  connectionPool = new ConnectionPool({
+  connectionPool = new sql.ConnectionPool({
     server: config.db.host,
     port: config.db.port,
     user: config.db.user,

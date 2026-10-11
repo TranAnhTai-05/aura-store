@@ -38,17 +38,12 @@ export const config = {
     : isProduction,
   db: {
     host: process.env.DB_HOST || '127.0.0.1',
-    port: Number(process.env.DB_PORT) || 3306,
+    port: Number(process.env.DB_PORT) || 1433,
     user: required('DB_USER'),
-    // XAMPP ships with an empty root password, so empty is allowed here
-    password: process.env.DB_PASSWORD ?? '',
+    password: required('DB_PASSWORD'),
     database: required('DB_NAME'),
-    // Hosted MySQL (Aiven…) requires TLS. DB_SSL_CA is the provider's CA certificate (PEM);
-    // without it the system's trusted authorities are used.
-    ssl:
-      process.env.DB_SSL === 'true'
-        ? { rejectUnauthorized: true, ca: process.env.DB_SSL_CA?.replace(/\\n/g, '\n') || undefined }
-        : undefined,
+    encrypt: process.env.DB_ENCRYPT !== 'false',
+    trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE === 'true',
   },
   // Which proxies may report the visitor's IP (used to rate-limit logins). Hosting platforms
   // put one proxy in front of the app: TRUST_PROXY=1. Default: only a proxy on this machine.

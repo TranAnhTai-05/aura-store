@@ -1,5 +1,5 @@
 /**
- * The API against a real MySQL database.
+ * The API against a real SQL Server database.
  *
  * Uses its own database (the DB_NAME from .env followed by "_test"), which is wiped and
  * filled with the sample data at the start. The shop's own database is never touched.

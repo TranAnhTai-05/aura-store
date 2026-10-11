@@ -1,5 +1,4 @@
-import type { PoolConnection } from 'mysql2/promise';
-import { rows, row, transaction } from '../db/pool';
+import { rows, row, transaction, PoolConnection } from '../db/pool';
 import { PromotionRow, loadOrders, toPromotion } from '../db/mappers';
 import { badRequest, conflict, notFound } from '../http';
 import { CartLine, CustomerInfo, Order, OrderStatus, PaymentMethod } from '../../shared/types';
@@ -55,8 +54,9 @@ export async function placeOrder(input: PlaceOrderInput): Promise<Order> {
     const ids = [...new Set(input.lines.map((l) => l.productId))].sort();
     const products = await rows<StockRow>(
       `SELECT id, name, sku, price, stock, is_active, illustration_type, images, colors, capacities
-       FROM products WHERE id IN (${ids.map(() => '?').join(', ')})
-       ORDER BY id FOR UPDATE`,
+       FROM products WITH (UPDLOCK, ROWLOCK)
+       WHERE id IN (${ids.map(() => '?').join(', ')})
+       ORDER BY id`,
       ids,
       db
     );
@@ -97,7 +97,7 @@ export async function placeOrder(input: PlaceOrderInput): Promise<Order> {
     let couponCode: string | null = null;
     if (input.couponCode) {
       const promo = await row<PromotionRow>(
-        'SELECT * FROM promotions WHERE code = ? FOR UPDATE',
+        'SELECT * FROM promotions WITH (UPDLOCK, ROWLOCK) WHERE code = ?',
         [input.couponCode],
         db
       );
@@ -119,6 +119,7 @@ export async function placeOrder(input: PlaceOrderInput): Promise<Order> {
       `INSERT INTO orders (order_number, user_id, customer_name, customer_phone, customer_email,
          city, district, ward, address, note, subtotal, shipping_fee, discount_amount, coupon_code,
          total_amount, payment_method, payment_status, status, created_at, updated_at)
+       OUTPUT INSERTED.id AS insertId
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', ?, ?)`,
       [
         // Replaced right below, once the id that makes it unique is known
@@ -142,7 +143,7 @@ export async function placeOrder(input: PlaceOrderInput): Promise<Order> {
         now,
       ]
     );
-    const id = (inserted as { insertId: number }).insertId;
+    const id = inserted.insertId;
     await db.query('UPDATE orders SET order_number = ? WHERE id = ?', [`AUR-${10000 + id}`, id]);
 
     for (const line of input.lines) {
@@ -193,7 +194,7 @@ async function releaseOrder(db: PoolConnection, order: Order) {
   }
   if (order.couponCode) {
     await db.query(
-      'UPDATE promotions SET usage_count = GREATEST(usage_count, 1) - 1 WHERE code = ?',
+      'UPDATE promotions SET usage_count = CASE WHEN usage_count > 0 THEN usage_count - 1 ELSE 0 END WHERE code = ?',
       [order.couponCode]
     );
   }
@@ -210,7 +211,11 @@ export async function moveOrder(
   guard?: (order: Order) => void
 ): Promise<Order> {
   await transaction(async (db) => {
-    const locked = await row('SELECT id FROM orders WHERE id = ? FOR UPDATE', [orderId], db);
+    const locked = await row(
+      'SELECT id FROM orders WITH (UPDLOCK, ROWLOCK) WHERE id = ?',
+      [orderId],
+      db
+    );
     if (!locked) throw notFound('Không tìm thấy đơn hàng.');
 
     const order = (await loadOrders('WHERE id = ?', [orderId], db))[0];
@@ -249,7 +254,7 @@ export async function moveOrder(
 export async function confirmPayment(orderId: number): Promise<Order> {
   await transaction(async (db) => {
     const order = await row<{ status: OrderStatus; payment_status: string }>(
-      'SELECT status, payment_status FROM orders WHERE id = ? FOR UPDATE',
+      'SELECT status, payment_status FROM orders WITH (UPDLOCK, ROWLOCK) WHERE id = ?',
       [orderId],
       db
     );

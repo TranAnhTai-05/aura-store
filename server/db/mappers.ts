@@ -1,5 +1,4 @@
-import type { PoolConnection, Pool } from 'mysql2/promise';
-import { getPool, rows } from './pool';
+import { DbExecutor, getPool, rows } from './pool';
 import {
   CartItem,
   Category,
@@ -19,7 +18,7 @@ import {
 } from '../../shared/types';
 import { calcDiscountPercent } from '../../shared/pricing';
 
-/** Rows as they come out of MySQL, and the functions that turn them into API objects */
+/** Rows as they come out of SQL Server, and the functions that turn them into API objects */
 
 export type UserRow = {
   id: string;
@@ -106,7 +105,7 @@ type OrderItemRow = {
 
 type OrderEventRow = { order_id: number; status: OrderStatus; note: string | null; created_at: Date };
 
-/** MariaDB hands JSON columns back as text, MySQL as parsed values */
+/** JSON is stored as text so the same mapping works with SQL Server NVARCHAR columns. */
 function json<T>(value: T | string, fallback: T): T {
   if (typeof value !== 'string') return value ?? fallback;
   try {
@@ -221,10 +220,12 @@ export async function loadCategories(): Promise<Category[]> {
     illustration_type: IllustrationType;
     item_count: number;
   }>(
-    `SELECT c.*, COUNT(p.id) AS item_count
+    `SELECT c.id, c.name, c.slug, c.description, c.icon, c.illustration_type, c.sort_order,
+            COUNT(p.id) AS item_count
      FROM categories c
      LEFT JOIN products p ON p.category_id = c.id AND p.is_active = 1
-     GROUP BY c.id ORDER BY c.sort_order, c.name`
+     GROUP BY c.id, c.name, c.slug, c.description, c.icon, c.illustration_type, c.sort_order
+     ORDER BY c.sort_order, c.name`
   );
   return found.map((r) => ({
     id: r.id,
@@ -244,7 +245,7 @@ export type PromotionRow = {
   discount_percent: number;
   max_discount: number | null;
   min_order: number;
-  valid_until: string;
+  valid_until: string | Date;
   usage_count: number;
   max_usage: number;
   is_active: number;
@@ -258,7 +259,10 @@ export function toPromotion(r: PromotionRow): Promotion {
     discountPercent: r.discount_percent,
     maxDiscount: r.max_discount ?? undefined,
     minOrder: r.min_order,
-    validUntil: String(r.valid_until).slice(0, 10),
+    validUntil:
+      r.valid_until instanceof Date
+        ? r.valid_until.toISOString().slice(0, 10)
+        : String(r.valid_until).slice(0, 10),
     usageCount: r.usage_count,
     maxUsage: r.max_usage,
     isActive: !!r.is_active,
@@ -326,7 +330,7 @@ function toOrderItem(r: OrderItemRow): CartItem {
 export async function loadOrders(
   where = '',
   params: (string | number)[] = [],
-  executor: Pool | PoolConnection = getPool()
+  executor: DbExecutor = getPool()
 ): Promise<Order[]> {
   const orders = await rows<OrderRow>(
     `SELECT * FROM orders ${where} ORDER BY created_at DESC, id DESC`,

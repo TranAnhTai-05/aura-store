@@ -1,5 +1,4 @@
-import type { ResultSetHeader } from 'mysql2/promise';
-import { getPool, row, transaction } from './pool';
+import { DbValue, getPool, isDuplicateKeyError, row, transaction } from './pool';
 import { SEED_PASSWORDS } from './seedData';
 import { buildSeed } from './seedBuilder';
 import { hashPassword } from '../auth';
@@ -34,14 +33,22 @@ async function load(mode: Mode): Promise<SeedReport> {
 
   await transaction(async (db) => {
     /** Inserts a row; when adding to a database in use, a row that already exists is kept */
-    const insert = async (sql: string, values: unknown[]) => {
-      const statement = mode === 'add' ? sql.replace(/^\s*INSERT INTO/, 'INSERT IGNORE INTO') : sql;
-      const [result] = await db.query<ResultSetHeader>(statement, values);
-      return { added: result.affectedRows > 0, id: result.insertId };
+    const insert = async (sql: string, values: DbValue[]) => {
+      const statement = sql.replace(
+        /^(\s*INSERT INTO orders\s*\([^)]*\))(\s*VALUES)/i,
+        '$1 OUTPUT INSERTED.id AS insertId$2'
+      );
+      try {
+        const [result] = await db.query(statement, values);
+        return { added: result.affectedRows > 0, id: result.insertId };
+      } catch (error) {
+        if (mode === 'add' && isDuplicateKeyError(error)) return { added: false, id: 0 };
+        throw error;
+      }
     };
-    const exists = async (sql: string, values: unknown[]) => {
+    const exists = async (sql: string, values: DbValue[]) => {
       const [found] = await db.query(sql, values);
-      return (found as unknown[]).length > 0;
+      return found.recordset.length > 0;
     };
 
     for (const user of sample.users) {
@@ -126,8 +133,8 @@ async function load(mode: Mode): Promise<SeedReport> {
         report.photos += product.images.length;
       } else if (product.images.length > 0) {
         // A product that is already there only receives photos if it has none of its own
-        const [result] = await db.query<ResultSetHeader>(
-          'UPDATE products SET images = ? WHERE id = ? AND JSON_LENGTH(images) = 0',
+        const [result] = await db.query(
+          "UPDATE products SET images = ? WHERE id = ? AND JSON_VALUE(images, '$[0]') IS NULL",
           [JSON.stringify(product.images), product.id]
         );
         if (result.affectedRows > 0) report.photos += product.images.length;
@@ -264,7 +271,7 @@ async function load(mode: Mode): Promise<SeedReport> {
 export async function seed(): Promise<SeedReport> {
   const report = await load('fill');
   // New orders continue after the highest sample order number
-  await getPool().query('ALTER TABLE orders AUTO_INCREMENT = 1001');
+  await getPool().query("DBCC CHECKIDENT ('orders', RESEED, 1000)");
   return report;
 }
 

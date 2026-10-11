@@ -1,19 +1,19 @@
 # AURA Store
 
 Website thương mại điện tử full-stack cho thương hiệu thiết bị & phong cách sống AURA:
-cửa hàng cho khách, khu vực quản trị tách biệt, API và cơ sở dữ liệu MySQL.
+cửa hàng cho khách, khu vực quản trị tách biệt, API và cơ sở dữ liệu Microsoft SQL Server.
 
 | Tầng | Công nghệ |
 | --- | --- |
 | Giao diện | React 19, TypeScript, Vite 8, Tailwind CSS 4 |
 | Máy chủ | Node.js, Express 5, TypeScript |
-| Cơ sở dữ liệu | MySQL 8 (tương thích MariaDB của XAMPP) |
+| Cơ sở dữ liệu | Microsoft SQL Server |
 | Xác thực | JWT trong cookie httpOnly, mật khẩu băm bằng bcrypt |
-| Kiểm thử | `node:test`, 44 bài kiểm thử (quy tắc nghiệp vụ + API trên MySQL thật) |
+| Kiểm thử | `node:test`, kiểm thử quy tắc nghiệp vụ và API trên SQL Server |
 
 ## Cài đặt
 
-Yêu cầu: **Node.js 22 trở lên** và **MySQL** (chọn một trong hai cách bên dưới).
+Yêu cầu: **Node.js 22 trở lên** và một instance **Microsoft SQL Server**.
 
 ### 1. Cài thư viện và tạo tệp cấu hình
 
@@ -27,25 +27,29 @@ Sao chép `.env.example` thành `.env`, rồi đặt `JWT_SECRET` là một chu�
 node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 ```
 
-### 2. Chuẩn bị MySQL
+### 2. Chuẩn bị SQL Server
 
-**Cách A — XAMPP hoặc MySQL đã cài sẵn.** Bật MySQL, rồi sửa `.env`:
+Tạo một database rỗng, ví dụ `aura_store`, trên GearHost hoặc SQL Server Management Studio.
+Sửa `.env` theo thông tin kết nối do nhà cung cấp cấp:
 
 ```
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=
+DB_HOST=<SQL Server host>
+DB_PORT=<SQL Server port, thường là 1433>
+DB_USER=<username>
+DB_PASSWORD=<password>
 DB_NAME=aura_store
+DB_ENCRYPT=true
+DB_TRUST_SERVER_CERTIFICATE=false
 ```
 
-**Cách B — Docker.** Đặt `DB_PASSWORD` và `DB_ROOT_PASSWORD` trong `.env` (giữ `DB_PORT=3307`), rồi chạy:
+Chỉ cần tạo database; khi ứng dụng khởi động, nó tự tạo các bảng và nạp dữ liệu mẫu. Không chạy
+các tệp dump MySQL cũ bằng SQL Server. Cấu trúc T-SQL tham khảo nằm ở
+[`database/schema.sql`](database/schema.sql).
 
-```bash
-docker compose up -d
-```
-
-Không cần tạo bảng bằng tay: lần đầu khởi động, máy chủ tự tạo cơ sở dữ liệu, các bảng và nạp
-dữ liệu mẫu. Nếu muốn nhập thủ công qua phpMyAdmin, dùng [`database/aura_store.sql`](database/aura_store.sql).
+Nếu cần SQL Server local, có thể khởi động container bằng `docker compose up -d sqlserver`
+(Docker Desktop phải đang chạy), rồi tạo database trong SSMS. Khi dùng container, đặt
+`DB_HOST=127.0.0.1`, `DB_PORT=1433`, `DB_USER=sa` và `DB_PASSWORD` khớp mật khẩu quản trị của
+container.
 
 ### 3. Chạy
 
@@ -70,6 +74,7 @@ Mở http://localhost:3000. Lệnh này chạy cả API (cổng 4000) lẫn giao
 | `npm run db:reset` | **Xóa toàn bộ dữ liệu** rồi nạp lại dữ liệu mẫu |
 
 `npm test` dùng cơ sở dữ liệu riêng tên `<DB_NAME>_test` và không đụng tới dữ liệu của cửa hàng.
+Tạo sẵn database kiểm thử đó trên SQL Server trước khi chạy bài kiểm thử API.
 
 ## Dữ liệu mẫu
 

@@ -11,7 +11,7 @@ pipeline {
     environment {
         IMAGE_NAME           = 'aura-store'
         DEPLOY_DIR           = 'C:\\aura-deploy'
-        // Tên các container: aura-prod-app-1, aura-prod-mysql-1
+        // Tên container ứng dụng: aura-prod-app-1
         COMPOSE_PROJECT_NAME = 'aura-prod'
     }
 
@@ -77,7 +77,7 @@ pipeline {
                         $lines = @(Get-Content $envFile | Where-Object { $_ -notmatch '^AURA_IMAGE=' }) + "AURA_IMAGE=$image"
                         [System.IO.File]::WriteAllLines($envFile, $lines)
 
-                        # Dữ liệu MySQL và ảnh tải lên nằm trong volume nên được giữ nguyên
+                        # SQL Server chạy bên ngoài; ảnh tải lên nằm trong volume bền vững
                         Set-Location $dir
                         docker compose up -d
                         if ($LASTEXITCODE) { exit $LASTEXITCODE }

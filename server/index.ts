@@ -9,13 +9,13 @@ const CONNECT_PAUSE_MS = 3000;
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** A wrong password will not fix itself; a database that is still starting up will */
+/** Invalid credentials will not fix themselves; a database that is still starting up will. */
 const isWorthRetrying = (code?: string) =>
-  code !== 'ER_ACCESS_DENIED_ERROR' && code !== 'ER_DBACCESS_DENIED_ERROR';
+  code !== 'ELOGIN' && code !== 'EINVALID';
 
 /**
- * Connects and prepares the tables. MySQL often needs a few seconds after
- * "docker compose up", so the first failures are waited out.
+ * Connects and prepares the tables. Hosted SQL Server instances can take a few
+ * seconds to accept connections after waking up, so transient failures are retried.
  */
 async function prepareDatabase() {
   for (let attempt = 1; ; attempt++) {
@@ -32,13 +32,12 @@ async function prepareDatabase() {
       await disconnect().catch(() => {});
 
       if (attempt >= CONNECT_ATTEMPTS || !isWorthRetrying(code)) {
-        console.error(`\n[api] Không chuẩn bị được MySQL tại ${config.db.host}:${config.db.port} (${code ?? error}).`);
-        console.error('      Kiểm tra rằng MySQL đang chạy và thông tin trong tệp .env là đúng.');
-        console.error('      Dùng Docker: chạy "docker compose up -d" rồi thử lại.\n');
+        console.error(`\n[api] Không chuẩn bị được SQL Server tại ${config.db.host}:${config.db.port} (${code ?? error}).`);
+        console.error('      Kiểm tra host, port, user, password, database và tùy chọn mã hóa trong .env.\n');
         process.exit(1);
       }
       console.log(
-        `[api] MySQL chưa sẵn sàng (${code ?? 'lỗi kết nối'}), thử lại lần ${attempt + 1}/${CONNECT_ATTEMPTS}...`
+        `[api] SQL Server chưa sẵn sàng (${code ?? 'lỗi kết nối'}), thử lại lần ${attempt + 1}/${CONNECT_ATTEMPTS}...`
       );
       await pause(CONNECT_PAUSE_MS);
     }
@@ -59,7 +58,7 @@ async function main() {
       process.exit(1);
     }
     console.log(
-      `[api] Đang chạy tại http://localhost:${config.port} · MySQL ${config.db.host}:${config.db.port}/${config.db.database}`
+      `[api] Đang chạy tại http://localhost:${config.port} · SQL Server ${config.db.host}:${config.db.port}/${config.db.database}`
     );
   });
 

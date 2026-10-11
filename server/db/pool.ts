@@ -1,50 +1,72 @@
-import mysql, { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import sql, { ConnectionPool, Transaction } from 'mssql';
 import { config } from '../config';
 
-let pool: Pool | null = null;
-
-const connectionOptions = {
-  host: config.db.host,
-  port: config.db.port,
-  user: config.db.user,
-  password: config.db.password,
-  ssl: config.db.ssl,
-  charset: 'utf8mb4',
-  // Timestamps are stored and read as UTC; the browser formats them for the viewer
-  timezone: 'Z',
-  // DATE columns (e.g. a promotion's last day) stay 'YYYY-MM-DD' instead of becoming a moment in time
-  dateStrings: ['DATE'] as ('DATE' | 'DATETIME' | 'TIMESTAMP')[],
-  // SUM() and AVG() come back as numbers, not strings
-  decimalNumbers: true,
+export type DbValue = string | number | boolean | null | Date;
+export type DbRow = Record<string, unknown>;
+export type DbResult = {
+  recordset: DbRow[];
+  rowsAffected: number[];
+  affectedRows: number;
+  insertId: number;
 };
 
-/** Creates the database when the account is allowed to; otherwise it has to exist already */
-async function ensureDatabase(): Promise<void> {
-  const connection = await mysql.createConnection(connectionOptions);
-  try {
-    await connection.query(
-      `CREATE DATABASE IF NOT EXISTS \`${config.db.database.replace(/`/g, '')}\`
-       CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+type RequestSource = ConnectionPool | Transaction;
+
+export class DbExecutor {
+  constructor(private readonly source: RequestSource) {}
+
+  async query<T extends DbRow = DbRow>(
+    statement: string,
+    params: DbValue[] = []
+  ): Promise<[DbResult]> {
+    const request = this.source.request();
+    params.forEach((value, index) => request.input(`p${index}`, value));
+
+    let parameter = 0;
+    const query = statement.replace(/'(?:''|[^'])*'|"(?:\"\"|[^"])*"|\?/g, (token) =>
+      token === '?' ? `@p${parameter++}` : token
     );
-  } catch (error) {
-    const code = (error as { code?: string }).code;
-    // A restricted account cannot create databases; that is fine if the database is there
-    if (code !== 'ER_DBACCESS_DENIED_ERROR' && code !== 'ER_ACCESS_DENIED_ERROR') throw error;
-  } finally {
-    await connection.end();
+    const result = await request.query<T>(query);
+    const recordset = (result.recordset ?? []) as DbRow[];
+    const rowsAffected = result.rowsAffected ?? [];
+    return [
+      {
+        recordset,
+        rowsAffected,
+        affectedRows: rowsAffected.reduce((total, count) => total + count, 0),
+        insertId: Number(recordset[0]?.insertId ?? 0),
+      },
+    ];
   }
 }
 
+export type PoolConnection = DbExecutor;
+export type Pool = DbExecutor;
+type Params = DbValue[];
+
+let connectionPool: ConnectionPool | null = null;
+let pool: Pool | null = null;
+
 export async function connect(): Promise<Pool> {
   if (pool) return pool;
-  await ensureDatabase();
-  pool = mysql.createPool({
-    ...connectionOptions,
+
+  connectionPool = new ConnectionPool({
+    server: config.db.host,
+    port: config.db.port,
+    user: config.db.user,
+    password: config.db.password,
     database: config.db.database,
-    connectionLimit: 10,
-    waitForConnections: true,
-    namedPlaceholders: false,
+    connectionTimeout: 30_000,
+    requestTimeout: 30_000,
+    pool: { max: 10, min: 0, idleTimeoutMillis: 30_000 },
+    options: {
+      encrypt: config.db.encrypt,
+      trustServerCertificate: config.db.trustServerCertificate,
+      enableArithAbort: true,
+    },
   });
+  await connectionPool.connect();
+  pool = new DbExecutor(connectionPool);
   await pool.query('SELECT 1');
   return pool;
 }
@@ -55,51 +77,55 @@ export function getPool(): Pool {
 }
 
 export async function disconnect(): Promise<void> {
-  await pool?.end();
+  const current = connectionPool;
+  connectionPool = null;
   pool = null;
+  if (current?.connected) await current.close();
 }
 
-type Params = (string | number | boolean | null | Date)[];
-type Executor = Pool | PoolConnection;
-
-export async function rows<T = RowDataPacket>(
-  sql: string,
+export async function rows<T extends DbRow = DbRow>(
+  statement: string,
   params: Params = [],
-  executor: Executor = getPool()
+  executor: PoolConnection = getPool()
 ): Promise<T[]> {
-  const [result] = await executor.query<RowDataPacket[]>(sql, params);
-  return result as T[];
+  const [result] = await executor.query(statement, params);
+  return result.recordset as T[];
 }
 
-export async function row<T = RowDataPacket>(
-  sql: string,
+export async function row<T extends DbRow = DbRow>(
+  statement: string,
   params: Params = [],
-  executor: Executor = getPool()
+  executor: PoolConnection = getPool()
 ): Promise<T | undefined> {
-  return (await rows<T>(sql, params, executor))[0];
+  return (await rows<T>(statement, params, executor))[0];
 }
 
 export async function run(
-  sql: string,
+  statement: string,
   params: Params = [],
-  executor: Executor = getPool()
-): Promise<ResultSetHeader> {
-  const [result] = await executor.query<ResultSetHeader>(sql, params);
+  executor: PoolConnection = getPool()
+): Promise<DbResult> {
+  const [result] = await executor.query(statement, params);
   return result;
 }
 
-/** Runs `work` in a transaction: everything it does is kept, or nothing is */
+/** Runs `work` in a transaction: everything it does is kept, or nothing is. */
 export async function transaction<T>(work: (connection: PoolConnection) => Promise<T>): Promise<T> {
-  const connection = await getPool().getConnection();
+  if (!connectionPool) throw new Error('Database pool is not connected yet.');
+  const transaction = new sql.Transaction(connectionPool);
+  await transaction.begin(sql.ISOLATION_LEVEL.READ_COMMITTED);
   try {
-    await connection.beginTransaction();
-    const result = await work(connection);
-    await connection.commit();
+    const result = await work(new DbExecutor(transaction));
+    await transaction.commit();
     return result;
   } catch (error) {
-    await connection.rollback();
+    await transaction.rollback();
     throw error;
-  } finally {
-    connection.release();
   }
+}
+
+export function isDuplicateKeyError(error: unknown): boolean {
+  const code = (error as { number?: number; code?: string }).number;
+  const name = (error as { code?: string }).code;
+  return code === 2601 || code === 2627 || name === 'EREQUEST_DUPLICATE';
 }

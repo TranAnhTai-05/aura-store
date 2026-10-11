@@ -1,16 +1,16 @@
 # Triển khai CI/CD: GitHub → Jenkins → Docker Hub → Docker
 
-Dựa theo tài liệu "CI-CD Jenkins + Docker + GitHub", đã đổi từ .NET sang dự án này (Node.js + React + MySQL)
+Dựa theo tài liệu "CI-CD Jenkins + Docker + GitHub", đã đổi từ .NET sang dự án này (Node.js + React + SQL Server)
 và từ server Ubuntu sang **một máy Windows** chạy cả Jenkins lẫn Docker Desktop.
 
 Luồng: `git push` → Jenkins phát hiện commit mới → build image → push Docker Hub → `docker compose up -d`
-trên chính máy đó.
+trên chính máy đó. SQL Server được host riêng, ví dụ trên GearHost.
 
 | Tệp | Vai trò |
 |---|---|
 | `Dockerfile` | Kiểm tra TypeScript, build giao diện, tạo image chạy Express (cổng 4000) |
 | `.dockerignore` | Không đưa `node_modules`, `.env`, ảnh tải lên… vào image |
-| `docker-compose.prod.yml` | Container `app` + `mysql`, dữ liệu nằm trong volume |
+| `docker-compose.prod.yml` | Container `app`, kết nối tới SQL Server bên ngoài |
 | `Jenkinsfile` | Checkout → Docker Build → Push Docker Hub → Deploy |
 
 ## 1. Yêu cầu trên máy Windows
@@ -52,14 +52,18 @@ COOKIE_SECURE=false
 # Chuỗi ngẫu nhiên ≥ 32 ký tự:
 #   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
 JWT_SECRET=
-DB_USER=aura
+DB_HOST=
+DB_PORT=1433
+DB_USER=
 DB_PASSWORD=
-DB_ROOT_PASSWORD=
-DB_NAME=aura_store
+DB_NAME=
+DB_ENCRYPT=true
+DB_TRUST_SERVER_CERTIFICATE=false
 ```
 
-Dòng `AURA_IMAGE=...` do Jenkins tự ghi mỗi lần deploy. Lần chạy đầu, máy chủ tự tạo bảng và nạp
-dữ liệu mẫu; những lần sau dữ liệu được giữ nguyên trong volume `aura-prod_aura-mysql-data`.
+Dòng `AURA_IMAGE=...` do Jenkins tự ghi mỗi lần deploy. Tạo database rỗng trên SQL Server trước.
+Lần chạy đầu, ứng dụng tự tạo bảng và nạp dữ liệu mẫu; những lần sau dữ liệu tiếp tục nằm trong
+database GearHost. Không đưa mật khẩu thật vào Git.
 
 ## 5. Credentials trong Jenkins
 
@@ -103,26 +107,27 @@ Từ đó, mỗi lần `git push` lên `main`, trong khoảng 2 phút Jenkins t�
 | `unauthorized` khi push | Token Docker Hub thiếu quyền Write hoặc sai username |
 | `Bind for 0.0.0.0:80 failed: port is already allocated` | Đổi `APP_PORT=8081` trong `.env`, mở `http://localhost:8081` |
 | Đăng nhập xong bị đăng xuất ngay | Thiếu `COOKIE_SECURE=false` trong `.env` |
+| API không kết nối được cơ sở dữ liệu | Kiểm tra SQL Server host/port, quyền user trên database, `DB_ENCRYPT` và chứng chỉ TLS |
 | Muốn quay về bản cũ | Sửa `AURA_IMAGE=...:<số build cũ>` trong `C:\aura-deploy\.env`, chạy `docker compose -p aura-prod up -d` trong thư mục đó |
 
 ## Triển khai lên Render
 
 Render build thẳng từ `Dockerfile` theo cấu hình trong `render.yaml`, không cần Jenkins hay Docker Hub.
-Render không có MySQL nên cơ sở dữ liệu đặt ở Aiven (gói miễn phí).
+Database cần được tạo sẵn trên nhà cung cấp SQL Server, ví dụ GearHost.
 
-1. **Aiven** (`console.aiven.io`) → Create service → MySQL → gói Free. Khi service chạy, mở tab
-   Overview để lấy Host, Port, User, Password, Database name và tải **CA certificate** (`ca.pem`).
+1. Trong GearHost tạo database **SQL Server** và user có quyền trên database; lấy host, port,
+   tên database, username và password từ thông tin kết nối.
 2. **Render** → mở
    `https://dashboard.render.com/blueprint/new?repo=https://github.com/<tên-bạn>/aura-store`
    rồi nhập các giá trị Render hỏi:
 
    | Biến | Giá trị |
    |---|---|
-   | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` | Lấy từ Aiven |
-   | `DB_NAME` | `defaultdb` (cơ sở dữ liệu Aiven tạo sẵn) |
-   | `DB_SSL_CA` | Toàn bộ nội dung tệp `ca.pem` |
+   | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Lấy từ GearHost |
+   | `DB_ENCRYPT` | `true` nếu SQL Server yêu cầu mã hóa |
+   | `DB_TRUST_SERVER_CERTIFICATE` | Chỉ đặt `true` nếu GearHost yêu cầu chấp nhận chứng chỉ chưa được tin cậy |
 
-   `JWT_SECRET` do Render tự sinh; `DB_SSL` và `TRUST_PROXY` đã đặt sẵn trong `render.yaml`.
+   `JWT_SECRET` do Render tự sinh; `TRUST_PROXY` đã đặt sẵn trong `render.yaml`.
 3. Bấm **Deploy Blueprint**. Lần chạy đầu máy chủ tự tạo bảng và nạp dữ liệu mẫu; web có địa chỉ
    `https://aura-store-xxxx.onrender.com`. Từ đó mỗi lần `git push` lên `main` Render tự deploy lại.
 
@@ -136,5 +141,5 @@ Giới hạn của gói miễn phí:
 ## Triển khai lên server Linux thật
 
 Khi có VPS, cài Docker ở đó, chép `docker-compose.prod.yml` và `.env` lên server, rồi đổi stage
-Deploy thành SSH vào server chạy `docker compose pull && docker compose up -d` (plugin SSH Agent),
-đúng như mục 9 của tài liệu gốc.
+Deploy thành SSH vào server chạy `docker compose pull && docker compose up -d` (plugin SSH Agent).
+SQL Server vẫn cần được cung cấp sẵn và cho phép kết nối từ ứng dụng.

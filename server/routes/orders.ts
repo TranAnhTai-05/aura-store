@@ -82,8 +82,8 @@ reviewsRouter.post('/', requireCustomer, async (req, res) => {
 
   // "Verified purchase" is decided here, from the customer's delivered orders
   const purchase = await row(
-    `SELECT oi.id FROM order_items oi JOIN orders o ON o.id = oi.order_id
-     WHERE o.user_id = ? AND o.status = 'delivered' AND oi.product_id = ? LIMIT 1`,
+    `SELECT TOP (1) oi.id FROM order_items oi JOIN orders o ON o.id = oi.order_id
+     WHERE o.user_id = ? AND o.status = 'delivered' AND oi.product_id = ?`,
     [user.id, input.productId]
   );
 

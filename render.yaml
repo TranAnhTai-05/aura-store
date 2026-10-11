@@ -1,5 +1,4 @@
-# Render Blueprint: một web service build từ Dockerfile, phục vụ cả API lẫn giao diện.
-# Render không có MySQL, nên cơ sở dữ liệu nằm ở nhà cung cấp ngoài (Aiven…); xem docs/DEPLOY.md.
+# Render Blueprint: web service build từ Dockerfile; SQL Server được host riêng (ví dụ GearHost).
 services:
   - type: web
     name: aura-store
@@ -8,7 +7,7 @@ services:
     region: singapore
     branch: main
     autoDeploy: true
-    # Máy chủ chỉ mở cổng sau khi kết nối được MySQL, nên địa chỉ này cũng xác nhận CSDL đã sẵn sàng
+    # Máy chủ chỉ mở cổng sau khi kết nối được SQL Server, nên địa chỉ này cũng xác nhận CSDL đã sẵn sàng
     healthCheckPath: /api/health
     envVars:
       # Render tự sinh một chuỗi ngẫu nhiên và giữ nguyên qua các lần deploy
@@ -17,7 +16,7 @@ services:
       # Render đặt một proxy trước ứng dụng; cần để giới hạn số lần đăng nhập theo IP khách
       - key: TRUST_PROXY
         value: "1"
-      - key: DB_SSL
+      - key: DB_ENCRYPT
         value: "true"
       # Các giá trị dưới đây nhập trong trang Render khi tạo Blueprint, không lưu trong repo
       - key: DB_HOST
@@ -30,6 +29,5 @@ services:
         sync: false
       - key: DB_NAME
         sync: false
-      # Chứng chỉ CA của nhà cung cấp MySQL (nội dung tệp ca.pem)
-      - key: DB_SSL_CA
+      - key: DB_TRUST_SERVER_CERTIFICATE
         sync: false

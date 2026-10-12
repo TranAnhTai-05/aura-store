@@ -31,7 +31,8 @@ export const LoginPage: React.FC = () => {
       return;
     }
     showToast(`Xin chào ${result.user.name}, đăng nhập thành công!`);
-    navigate(destination, { replace: true });
+    // Administrators go straight to the management area
+    navigate(result.user.role === 'admin' ? '/admin/dashboard' : destination, { replace: true });
   };
 
   const registerLink = redirectParam

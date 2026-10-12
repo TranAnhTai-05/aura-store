@@ -62,14 +62,16 @@ authRouter.post('/login', async (req, res) => {
   loginLimiter.check(key);
 
   const account = await row<UserRow>('SELECT * FROM users WHERE email = ?', [email]);
-  // Administrators sign in through the admin gate only. The answer is the same whether
-  // the email is unknown or the password is wrong, so accounts cannot be probed.
-  const isCustomer = !!account && account.role === 'customer';
-  const matches = isCustomer
+  // Both audiences sign in here: an administrator typing their credentials on the
+  // storefront form gets an administrator session instead of a customer one. The answer
+  // is the same whether the email is unknown or the password is wrong, so accounts
+  // cannot be probed.
+  const known = !!account;
+  const matches = known
     ? await verifyPassword(password, account.password_hash)
     : await wastePasswordCheck(password);
 
-  if (!isCustomer || !matches) {
+  if (!known || !matches) {
     loginLimiter.fail(key);
     throw unauthorized('Email hoặc mật khẩu không đúng.');
   }
@@ -78,7 +80,8 @@ authRouter.post('/login', async (req, res) => {
   }
 
   loginLimiter.reset(key);
-  startSession(res, 'customer', account, getSessionLifetime('customer'));
+  const audience = account.role === 'admin' ? 'admin' : 'customer';
+  startSession(res, audience, account, getSessionLifetime(audience));
   res.json({ user: toUser((await loadUser(account.id))!) });
 });
 

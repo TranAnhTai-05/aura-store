@@ -222,9 +222,20 @@ test('unknown accounts and wrong passwords get the same answer', async () => {
   assert.equal(unknown.data.error, wrong.data.error);
 });
 
-test('customers and administrators cannot use each other\'s door', async () => {
+test('the storefront form signs an administrator into the admin session', async () => {
   const browser = new Browser();
-  assert.equal((await browser.post('/api/auth/login', ADMIN)).status, 401);
+  const result = await browser.post('/api/auth/login', ADMIN);
+  assert.equal(result.status, 200);
+  assert.equal(result.data.user.role, 'admin');
+  assert.match(result.setCookie.join(';'), /aura_admin_session=.*HttpOnly/i);
+
+  // The admin area opens, while the customer session stays empty
+  assert.equal((await browser.get('/api/admin/overview')).status, 200);
+  assert.equal((await browser.get('/api/auth/me')).data.user, null);
+});
+
+test('customers cannot use the admin door', async () => {
+  const browser = new Browser();
   assert.equal((await browser.post('/api/admin/auth/login', DEMO)).status, 401);
 });
 

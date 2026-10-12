@@ -468,7 +468,11 @@ export const useStore = () => {
     password: string
   ): Promise<ActionResult<{ user: User }>> => {
     const result = await api.post<{ user: User }>('/api/auth/login', { email, password });
-    if (result.ok) applyCurrentUser(result.user);
+    // An administrator signing in on the storefront form lands in the admin session
+    if (result.ok) {
+      if (result.user.role === 'admin') applyAdminUser(result.user);
+      else applyCurrentUser(result.user);
+    }
     return toAction(result);
   };
 
